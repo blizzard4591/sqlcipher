@@ -20,6 +20,11 @@
 */
 #include "windows.h"
 
+#ifndef _M_AMD64
+#include <shared/winpackagefamily.h>
+#include <um/ddrawi.h>
+#endif
+
 #ifdef __CYGWIN__
 # include <sys/cygwin.h>
 # include <errno.h> /* amalgamator: dontcache */
