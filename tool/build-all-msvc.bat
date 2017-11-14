@@ -210,7 +210,7 @@ REM
 REM NOTE: If the list of platforms is not already set, use the default list.
 REM
 IF NOT DEFINED PLATFORMS (
-  SET PLATFORMS=x86 x86_amd64 x86_arm
+  SET PLATFORMS=x86 x86_amd64
 )
 
 %_VECHO% Platforms = '%PLATFORMS%'

@@ -203,7 +203,7 @@ FOR_WIN10 = 0
 # runtime library.
 #
 !IFNDEF NO_TCL
-NO_TCL = 0
+NO_TCL = 1
 !ENDIF
 # <</mark>>
 
@@ -596,8 +596,18 @@ TCC = $(CC) -nologo -W3 $(CCOPTS) $(TCCOPTS)
 TCC = $(TCC) -WX
 !ENDIF
 
-TCC = $(TCC) -DSQLITE_OS_WIN=1 -I. -I$(TOP) -I$(TOP)\src -fp:precise
-RCC = $(RC) -DSQLITE_OS_WIN=1 -I. -I$(TOP) -I$(TOP)\src $(RCOPTS) $(RCCOPTS)
+TCC = $(TCC) -DSQLITE_OS_WIN=1 -I. -I$(TOP) -I$(TOP)\src -fp:precise -I "C:\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0" -DSQLITE_HAS_CODEC=1 -DSQLCIPHER_CRYPTO_OPENSSL=1
+RCC = $(RC) -DSQLITE_OS_WIN=1 -I. -I$(TOP) -I$(TOP)\src -I "C:\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0" $(RCOPTS) $(RCCOPTS) -DSQLITE_HAS_CODEC=1 -DSQLCIPHER_CRYPTO_OPENSSL=1
+
+!IF "$(PLATFORM)"=="x86"
+TCC = $(TCC) -I "N:\CodeSigning\OpenSSL-Win32\include"
+RCC = $(RCC) -I "N:\CodeSigning\OpenSSL-Win32\include"
+!ELSEIF "$(PLATFORM)"=="x64"
+TCC = $(TCC) -I "N:\CodeSigning\OpenSSL-Win64\include"
+RCC = $(RCC) -I "N:\CodeSigning\OpenSSL-Win64\include"
+!ELSE
+CORE_LINK_OPTS =
+!ENDIF
 
 # Check if we want to use the "stdcall" calling convention when compiling.
 # This is not supported by the compilers for non-x86 platforms.  It should
@@ -659,6 +669,8 @@ CORE_LINK_DEP =
 !ENDIF
 !ENDIF
 
+#CORE_LINK_DEP = $(CORE_LINK_DEP)
+
 # These are additional linker options used for the core library.
 #
 !IFNDEF CORE_LINK_OPTS
@@ -671,7 +683,16 @@ CORE_LINK_OPTS =
 !ENDIF
 !ENDIF
 
+!IF "$(PLATFORM)"=="x86"
+CORE_LINK_OPTS = $(CORE_LINK_OPTS) "N:\CodeSigning\OpenSSL-Win32\lib\libeay32.lib" "N:\CodeSigning\OpenSSL-Win32\lib\ssleay32.lib"
+!ELSEIF "$(PLATFORM)"=="x64"
+CORE_LINK_OPTS = $(CORE_LINK_OPTS) "N:\CodeSigning\OpenSSL-Win64\lib\libeay32.lib" "N:\CodeSigning\OpenSSL-Win64\lib\ssleay32.lib"
+!ELSE
+CORE_LINK_OPTS =
+!ENDIF
+
 # These are additional compiler options used for the shell executable.
+#
 #
 !IFNDEF SHELL_COMPILE_OPTS
 !IF $(DYNAMIC_SHELL)!=0 || $(FOR_WIN10)!=0
@@ -1046,8 +1067,8 @@ TLIBS =
 # default to file, 2 to default to memory, and 3 to force temporary
 # tables to always be in memory.
 #
-TCC = $(TCC) -DSQLITE_TEMP_STORE=1
-RCC = $(RCC) -DSQLITE_TEMP_STORE=1
+TCC = $(TCC) -DSQLITE_TEMP_STORE=2
+RCC = $(RCC) -DSQLITE_TEMP_STORE=2
 
 # Enable/disable loadable extensions, and other optional features
 # based on configuration. (-DSQLITE_OMIT*, -DSQLITE_ENABLE*).
