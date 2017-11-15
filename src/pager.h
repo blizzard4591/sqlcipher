@@ -132,6 +132,7 @@ int sqlite3PagerSetPagesize(Pager*, u32*, int);
 /* BEGIN SQLCIPHER */
 #ifdef SQLITE_HAS_CODEC
 void sqlite3PagerAlignReserve(Pager*,Pager*);
+void *sqlite3PagerGetCodec(Pager *pPager);
 #endif
 /* END SQLCIPHER */
 Pgno sqlite3PagerMaxPageCount(Pager*, Pgno);
