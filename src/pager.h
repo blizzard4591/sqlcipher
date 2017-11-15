@@ -130,6 +130,7 @@ void sqlite3PagerSetBusyHandler(Pager*, int(*)(void *), void *);
 int sqlite3PagerSetPagesize(Pager*, u32*, int);
 #ifdef SQLITE_HAS_CODEC
 void sqlite3PagerAlignReserve(Pager*,Pager*);
+void *sqlite3PagerGetCodec(Pager *pPager);
 #endif
 int sqlite3PagerMaxPageCount(Pager*, int);
 void sqlite3PagerSetCachesize(Pager*, int);
