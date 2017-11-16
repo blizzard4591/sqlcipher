@@ -28,6 +28,7 @@ SET OPENSSL_DIR=C:\OpenSSL-Win64
 goto build
 
 :build
+@mkdir "%SC_OUTPUT_DIR%\include"
 @mkdir "%SC_OUTPUT_DIR%\compile"
 @mkdir "%SC_OUTPUT_DIR%\compile\%PLATFORM%"
 @mkdir "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug"
@@ -56,6 +57,8 @@ xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\distribute\%PLATFORM%\Release\"
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
 xcopy /Y sqlite3.lib "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
 xcopy /Y sqlite3.pdb "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
+
+xcopy /Y sqlite3.h "%SC_OUTPUT_DIR%\include\"
 
 goto commonExit
 
