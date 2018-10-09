@@ -44,9 +44,11 @@ nmake -f Makefile.msc clean > buildLogDebug.txt 2>&1
 SET DEBUG=2
 nmake -f Makefile.msc >> buildLogDebug.txt 2>&1
 IF ERRORLEVEL 1 GOTO errorHandling
+lib /NOLOGO /MACHINE:%PLATFORM% /def:sqlite3.def /out:"%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug\sqlite3.lib"
+
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\distribute\%PLATFORM%\Debug\"
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug\"
-xcopy /Y sqlite3.lib "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug\"
+REM xcopy /Y sqlite3.lib "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug\"
 xcopy /Y sqlite3.pdb "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Debug\"
 
 echo Building configuration: RELEASE %PLATFORM%
@@ -54,9 +56,10 @@ nmake -f Makefile.msc clean > buildLogRelease.txt 2>&1
 SET DEBUG=0
 nmake -f Makefile.msc >> buildLogRelease.txt 2>&1
 IF ERRORLEVEL 1 GOTO errorHandling
+lib /NOLOGO /MACHINE:%PLATFORM% /def:sqlite3.def /out:"%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\sqlite3.lib"
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\distribute\%PLATFORM%\Release\"
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
-xcopy /Y sqlite3.lib "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
+REM xcopy /Y sqlite3.lib "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
 xcopy /Y sqlite3.pdb "%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\"
 
 xcopy /Y sqlite3.h "%SC_OUTPUT_DIR%\include\sqlcipher\"
