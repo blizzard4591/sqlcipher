@@ -50,6 +50,7 @@ array set ::Configs [strip_comments {
     -O2
     --disable-amalgamation --disable-shared
     --enable-session
+    -DSQLITE_ENABLE_DESERIALIZE
   }
   "Sanitize" {
     CC=clang -fsanitize=undefined
@@ -79,6 +80,9 @@ array set ::Configs [strip_comments {
     -DSQLITE_ENABLE_UNLOCK_NOTIFY
     -DSQLITE_THREADSAFE
     -DSQLITE_TCL_DEFAULT_FULLMUTEX=1
+  }
+  "User-Auth" {
+    -O2
     -DSQLITE_USER_AUTHENTICATION=1
   }
   "Secure-Delete" {
@@ -274,6 +278,7 @@ array set ::Platforms [strip_comments {
     "Have-Not"                test
     "Secure-Delete"           test
     "Unlock-Notify"           "QUICKTEST_INCLUDE=notify2.test test"
+    "User-Auth"               tcltest
     "Update-Delete-Limit"     test
     "Extra-Robustness"        test
     "Device-Two"              test
@@ -496,7 +501,26 @@ proc run_slave_test {} {
       unset -nocomplain savedEnv(TCLSH_CMD)
     }
     set ::env(TCLSH_CMD) [file nativename [info nameofexecutable]]
-    set rc [catch [makeCommand $testtarget $makeOpts $cflags $opts]]
+
+    # Create a file called "makecommand.sh" containing the text of
+    # the make command line.
+    catch {
+      set cmd [makeCommand $testtarget $makeOpts $cflags $opts]
+      set fd [open makecommand.sh w]
+      foreach e $cmd { 
+        if {[string first " " $e]>=0} {
+          puts -nonewline $fd "\"$e\""
+        } else {
+          puts -nonewline $fd $e
+        }
+        puts -nonewline $fd " "
+      }
+      puts $fd ""
+      close $fd
+    } msg
+
+    # Run the make command.
+    set rc [catch {trace_cmd exec {*}$cmd >>& test.log} msg]
     if {[info exists savedEnv(TCLSH_CMD)]} {
       set ::env(TCLSH_CMD) $savedEnv(TCLSH_CMD)
     } else {
@@ -732,7 +756,7 @@ proc configureCommand {opts} {
 # specified targets, compiler flags, and options.
 #
 proc makeCommand { targets makeOpts cflags opts } {
-  set result [list trace_cmd exec]
+  set result [list]
   if {$::MSVC} {
     set nmakeDir [file nativename $::SRCDIR]
     set nmakeFile [file nativename [file join $nmakeDir Makefile.msc]]
@@ -753,7 +777,7 @@ proc makeCommand { targets makeOpts cflags opts } {
   foreach target $targets {
     lappend result $target
   }
-  lappend result CFLAGS=$cflags OPTS=$opts >>& test.log
+  lappend result CFLAGS=$cflags OPTS=$opts
 }
 
 # The following procedure prints its arguments if ::TRACE is true.

@@ -1305,12 +1305,14 @@ struct LookasideSlot {
 ** functions use a regular table table from hash.h.)
 **
 ** Hash each FuncDef structure into one of the FuncDefHash.a[] slots.
-** Collisions are on the FuncDef.u.pHash chain.
+** Collisions are on the FuncDef.u.pHash chain.  Use the SQLITE_FUNC_HASH()
+** macro to compute a hash on the function name.
 */
 #define SQLITE_FUNC_HASH_SZ 23
 struct FuncDefHash {
   FuncDef *a[SQLITE_FUNC_HASH_SZ];       /* Hash table for functions */
 };
+#define SQLITE_FUNC_HASH(C,L) (((C)+(L))%SQLITE_FUNC_HASH_SZ)
 
 #ifdef SQLITE_USER_AUTHENTICATION
 /*
@@ -1354,10 +1356,13 @@ void sqlite3CryptFunc(sqlite3_context*,int,sqlite3_value**);
 /* This is an extra SQLITE_TRACE macro that indicates "legacy" tracing
 ** in the style of sqlite3_trace()
 */
-#define SQLITE_TRACE_LEGACY  0x80
+#define SQLITE_TRACE_LEGACY          0x40     /* Use the legacy xTrace */
+#define SQLITE_TRACE_XPROFILE        0x80     /* Use the legacy xProfile */
 #else
-#define SQLITE_TRACE_LEGACY  0
+#define SQLITE_TRACE_LEGACY          0
+#define SQLITE_TRACE_XPROFILE        0
 #endif /* SQLITE_OMIT_DEPRECATED */
+#define SQLITE_TRACE_NONLEGACY_MASK  0x0f     /* Normal flags */
 
 
 /*
@@ -1371,7 +1376,7 @@ struct sqlite3 {
   Db *aDb;                      /* All backends */
   int nDb;                      /* Number of backends currently in use */
   u32 mDbFlags;                 /* flags recording internal state */
-  u32 flags;                    /* flags settable by pragmas. See below */
+  u64 flags;                    /* flags settable by pragmas. See below */
   i64 lastRowid;                /* ROWID of most recent insert (see above) */
   i64 szMmap;                   /* Default mmap_size setting */
   u32 nSchemaLock;              /* Do not reset the schema when non-zero */
@@ -1416,14 +1421,17 @@ struct sqlite3 {
   void **aExtension;            /* Array of shared library handles */
   int (*xTrace)(u32,void*,void*,void*);     /* Trace function */
   void *pTraceArg;                          /* Argument to the trace function */
+#ifndef SQLITE_OMIT_DEPRECATED
   void (*xProfile)(void*,const char*,u64);  /* Profiling function */
   void *pProfileArg;                        /* Argument to profile function */
+#endif
   void *pCommitArg;                 /* Argument to xCommitCallback() */
   int (*xCommitCallback)(void*);    /* Invoked at every commit. */
   void *pRollbackArg;               /* Argument to xRollbackCallback() */
   void (*xRollbackCallback)(void*); /* Invoked at every commit. */
   void *pUpdateArg;
   void (*xUpdateCallback)(void*,int, const char*,const char*,sqlite_int64);
+  Parse *pParse;                /* Current parse */
 #ifdef SQLITE_ENABLE_PREUPDATE_HOOK
   void *pPreUpdateArg;          /* First argument to xPreUpdateCallback */
   void (*xPreUpdateCallback)(   /* Registered using sqlite3_preupdate_hook() */
@@ -1537,14 +1545,18 @@ struct sqlite3 {
 #define SQLITE_TriggerEQP     0x01000000  /* Show trigger EXPLAIN QUERY PLAN */
 #define SQLITE_ResetDatabase  0x02000000  /* Reset the database */
 #define SQLITE_LegacyAlter    0x04000000  /* Legacy ALTER TABLE behaviour */
+#define SQLITE_NoSchemaError  0x08000000  /* Do not report schema parse errors*/
+#define SQLITE_Defensive      0x10000000  /* Input SQL is likely hostile */
 
 /* Flags used only if debugging */
+#define HI(X)  ((u64)(X)<<32)
 #ifdef SQLITE_DEBUG
-#define SQLITE_SqlTrace       0x08000000  /* Debug print SQL as it executes */
-#define SQLITE_VdbeListing    0x10000000  /* Debug listings of VDBE programs */
-#define SQLITE_VdbeTrace      0x20000000  /* True to trace VDBE execution */
-#define SQLITE_VdbeAddopTrace 0x40000000  /* Trace sqlite3VdbeAddOp() calls */
-#define SQLITE_VdbeEQP        0x80000000  /* Debug EXPLAIN QUERY PLAN */
+#define SQLITE_SqlTrace       HI(0x0001)  /* Debug print SQL as it executes */
+#define SQLITE_VdbeListing    HI(0x0002)  /* Debug listings of VDBE progs */
+#define SQLITE_VdbeTrace      HI(0x0004)  /* True to trace VDBE execution */
+#define SQLITE_VdbeAddopTrace HI(0x0008)  /* Trace sqlite3VdbeAddOp() calls */
+#define SQLITE_VdbeEQP        HI(0x0010)  /* Debug EXPLAIN QUERY PLAN */
+#define SQLITE_ParserTrace    HI(0x0020)  /* PRAGMA parser_trace=ON */
 #endif
 
 /*
@@ -1553,7 +1565,8 @@ struct sqlite3 {
 #define DBFLAG_SchemaChange   0x0001  /* Uncommitted Hash table changes */
 #define DBFLAG_PreferBuiltin  0x0002  /* Preference to built-in funcs */
 #define DBFLAG_Vacuum         0x0004  /* Currently in a VACUUM */
-#define DBFLAG_SchemaKnownOk  0x0008  /* Schema is known to be valid */
+#define DBFLAG_VacuumInto     0x0008  /* Currently running VACUUM INTO */
+#define DBFLAG_SchemaKnownOk  0x0010  /* Schema is known to be valid */
 
 /*
 ** Bits of the sqlite3.dbOptFlags field that are used by the
@@ -1561,7 +1574,7 @@ struct sqlite3 {
 ** selectively disable various optimizations.
 */
 #define SQLITE_QueryFlattener 0x0001   /* Query flattening */
-                          /*  0x0002   available for reuse */
+#define SQLITE_WindowFunc     0x0002   /* Use xInverse for window functions */
 #define SQLITE_GroupByOrder   0x0004   /* GROUPBY cover of ORDERBY */
 #define SQLITE_FactorOutConst 0x0008   /* Constant factoring */
 #define SQLITE_DistinctOpt    0x0010   /* DISTINCT using indexes */
@@ -1678,8 +1691,8 @@ struct FuncDestructor {
                                     ** single query - might change over time */
 #define SQLITE_FUNC_AFFINITY 0x4000 /* Built-in affinity() function */
 #define SQLITE_FUNC_OFFSET   0x8000 /* Built-in sqlite_offset() function */
-#define SQLITE_FUNC_WINDOW  0x10000 /* Built-in window-only function */
-#define SQLITE_FUNC_WINDOW_SIZE  0x20000  /* Requires partition size as arg. */
+#define SQLITE_FUNC_WINDOW   0x00010000 /* Built-in window-only function */
+#define SQLITE_FUNC_INTERNAL 0x00040000 /* For use by NestedParse() only */
 
 /*
 ** The following three macros, FUNCTION(), LIKEFUNC() and AGGREGATE() are
@@ -1755,10 +1768,13 @@ struct FuncDestructor {
 #define AGGREGATE2(zName, nArg, arg, nc, xStep, xFinal, extraFlags) \
   {nArg, SQLITE_UTF8|(nc*SQLITE_FUNC_NEEDCOLL)|extraFlags, \
    SQLITE_INT_TO_PTR(arg), 0, xStep,xFinal,xFinal,0,#zName, {0}}
-
 #define WAGGREGATE(zName, nArg, arg, nc, xStep, xFinal, xValue, xInverse, f) \
   {nArg, SQLITE_UTF8|(nc*SQLITE_FUNC_NEEDCOLL)|f, \
    SQLITE_INT_TO_PTR(arg), 0, xStep,xFinal,xValue,xInverse,#zName, {0}}
+#define INTERNAL_FUNCTION(zName, nArg, xFunc) \
+  {nArg, SQLITE_FUNC_INTERNAL|SQLITE_UTF8|SQLITE_FUNC_CONSTANT, \
+   0, 0, xFunc, 0, 0, 0, #zName, {0} }
+
 
 /*
 ** All current savepoints are stored in a linked list starting at
@@ -1993,6 +2009,7 @@ struct Table {
 #define TF_StatsUsed       0x0100    /* Query planner decisions affected by
                                      ** Index.aiRowLogEst[] values */
 #define TF_HasNotNull      0x0200    /* Contains NOT NULL constraints */
+#define TF_Shadow          0x0400    /* True for a shadow table */
 
 /*
 ** Test to see whether or not a table is a virtual table.  This is
@@ -2228,7 +2245,7 @@ struct Index {
   u16 nKeyCol;             /* Number of columns forming the key */
   u16 nColumn;             /* Number of columns stored in the index */
   u8 onError;              /* OE_Abort, OE_Ignore, OE_Replace, or OE_None */
-  unsigned idxType:2;      /* 1==UNIQUE, 2==PRIMARY KEY, 0==CREATE INDEX */
+  unsigned idxType:2;      /* 0:Normal 1:UNIQUE, 2:PRIMARY KEY, 3:IPK */
   unsigned bUnordered:1;   /* Use this index for == or IN queries only */
   unsigned uniqNotNull:1;  /* True if UNIQUE and NOT NULL for all columns */
   unsigned isResized:1;    /* True if resizeIndexObject() has been called */
@@ -2253,6 +2270,7 @@ struct Index {
 #define SQLITE_IDXTYPE_APPDEF      0   /* Created using CREATE INDEX */
 #define SQLITE_IDXTYPE_UNIQUE      1   /* Implements a UNIQUE constraint */
 #define SQLITE_IDXTYPE_PRIMARYKEY  2   /* Is the PRIMARY KEY for the table */
+#define SQLITE_IDXTYPE_IPK         3   /* INTEGER PRIMARY KEY index */
 
 /* Return true if index X is a PRIMARY KEY index */
 #define IsPrimaryKeyIndex(X)  ((X)->idxType==SQLITE_IDXTYPE_PRIMARYKEY)
@@ -2278,6 +2296,12 @@ struct IndexSample {
   tRowcnt *anLt;    /* Est. number of rows where key is less than this sample */
   tRowcnt *anDLt;   /* Est. number of distinct keys less than this sample */
 };
+
+/*
+** Possible values to use within the flags argument to sqlite3GetToken().
+*/
+#define SQLITE_TOKEN_QUOTED    0x1 /* Token is a quoted identifier. */
+#define SQLITE_TOKEN_KEYWORD   0x2 /* Token is a keyword. */
 
 /*
 ** Each token coming out of the lexer is an instance of
@@ -2460,21 +2484,29 @@ struct Expr {
                          ** TK_COLUMN: the value of p5 for OP_Column
                          ** TK_AGG_FUNCTION: nesting depth */
   AggInfo *pAggInfo;     /* Used by TK_AGG_COLUMN and TK_AGG_FUNCTION */
-  Table *pTab;           /* Table for TK_COLUMN expressions.  Can be NULL
-                         ** for a column of an index on an expression */
-#ifndef SQLITE_OMIT_WINDOWFUNC
-  Window *pWin;          /* Window definition for window functions */
-#endif
+  union {
+    Table *pTab;           /* TK_COLUMN: Table containing column. Can be NULL
+                           ** for a column of an index on an expression */
+    Window *pWin;          /* TK_FUNCTION: Window definition for the func */
+    struct {               /* TK_IN, TK_SELECT, and TK_EXISTS */
+      int iAddr;             /* Subroutine entry address */
+      int regReturn;         /* Register used to hold return address */
+    } sub;
+  } y;
 };
 
 /*
 ** The following are the meanings of bits in the Expr.flags field.
+** Value restrictions:
+**
+**          EP_Agg == NC_HasAgg == SF_HasAgg
+**          EP_Win == NC_HasWin
 */
 #define EP_FromJoin  0x000001 /* Originates in ON/USING clause of outer join */
-#define EP_Agg       0x000002 /* Contains one or more aggregate functions */
+#define EP_Distinct  0x000002 /* Aggregate function with DISTINCT keyword */
 #define EP_HasFunc   0x000004 /* Contains one or more functions of any kind */
 #define EP_FixedCol  0x000008 /* TK_Column with a known fixed value */
-#define EP_Distinct  0x000010 /* Aggregate function with DISTINCT keyword */
+#define EP_Agg       0x000010 /* Contains one or more aggregate functions */
 #define EP_VarSelect 0x000020 /* pSelect is correlated, not constant */
 #define EP_DblQuoted 0x000040 /* token.z was originally in "..." */
 #define EP_InfixFunc 0x000080 /* True for an infix function: LIKE, GLOB, etc */
@@ -2485,7 +2517,7 @@ struct Expr {
 #define EP_Skip      0x001000 /* COLLATE, AS, or UNLIKELY */
 #define EP_Reduced   0x002000 /* Expr struct EXPR_REDUCEDSIZE bytes only */
 #define EP_TokenOnly 0x004000 /* Expr struct EXPR_TOKENONLYSIZE bytes only */
-#define EP_Static    0x008000 /* Held in memory not obtained from malloc() */
+#define EP_Win       0x008000 /* Contains window functions */
 #define EP_MemToken  0x010000 /* Need to sqlite3DbFree() Expr.zToken */
 #define EP_NoReduce  0x020000 /* Cannot EXPRDUP_REDUCE this Expr */
 #define EP_Unlikely  0x040000 /* unlikely() or likelihood() function */
@@ -2494,6 +2526,10 @@ struct Expr {
 #define EP_Subquery  0x200000 /* Tree contains a TK_SELECT operator */
 #define EP_Alias     0x400000 /* Is an alias for a result set column */
 #define EP_Leaf      0x800000 /* Expr.pLeft, .pRight, .u.pSelect all NULL */
+#define EP_WinFunc  0x1000000 /* TK_FUNCTION with Expr.y.pWin set */
+#define EP_Subrtn   0x2000000 /* Uses Expr.y.sub. TK_IN, _SELECT, or _EXISTS */
+#define EP_Quoted   0x4000000 /* TK_ID was originally quoted */
+#define EP_Static   0x8000000 /* Held in memory not obtained from malloc() */
 
 /*
 ** The EP_Propagate mask is a set of properties that automatically propagate
@@ -2733,8 +2769,9 @@ struct NameContext {
 ** Allowed values for the NameContext, ncFlags field.
 **
 ** Value constraints (all checked via assert()):
-**    NC_HasAgg    == SF_HasAgg
+**    NC_HasAgg    == SF_HasAgg    == EP_Agg
 **    NC_MinMaxAgg == SF_MinMaxAgg == SQLITE_FUNC_MINMAX
+**    NC_HasWin    == EP_Win
 **
 */
 #define NC_AllowAgg  0x0001  /* Aggregate functions are allowed here */
@@ -2750,6 +2787,7 @@ struct NameContext {
 #define NC_MinMaxAgg 0x1000  /* min/max aggregates seen.  See note above */
 #define NC_Complex   0x2000  /* True if a function or subquery seen */
 #define NC_AllowWin  0x4000  /* Window functions are allowed here */
+#define NC_HasWin    0x8000  /* One or more window functions seen */
 
 /*
 ** An instance of the following object describes a single ON CONFLICT
@@ -3037,16 +3075,17 @@ struct Parse {
   u8 hasCompound;      /* Need to invoke convertCompoundSelectToSubquery() */
   u8 okConstFactor;    /* OK to factor out constants */
   u8 disableLookaside; /* Number of times lookaside has been disabled */
+  u8 disableVtab;      /* Disable all virtual tables for this parse */
   int nRangeReg;       /* Size of the temporary register block */
   int iRangeReg;       /* First register in temporary register block */
   int nErr;            /* Number of errors seen */
   int nTab;            /* Number of previously allocated VDBE cursors */
   int nMem;            /* Number of memory cells used so far */
-  int nOpAlloc;        /* Number of slots allocated for Vdbe.aOp[] */
   int szOpAlloc;       /* Bytes of memory space allocated for Vdbe.aOp[] */
   int iSelfTab;        /* Table associated with an index on expr, or negative
                        ** of the base register during check-constraint eval */
-  int nLabel;          /* Number of labels used */
+  int nLabel;          /* The *negative* of the number of labels used */
+  int nLabelAlloc;     /* Number of slots in aLabel */
   int *aLabel;         /* Space to hold the labels */
   ExprList *pConstExpr;/* Constant expressions */
   Token constraintName;/* Name of the constraint currently being parsed */
@@ -3063,6 +3102,7 @@ struct Parse {
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   Parse *pToplevel;    /* Parse structure for main program (or NULL) */
   Table *pTriggerTab;  /* Table triggers are being coded for */
+  Parse *pParentParse; /* Parent parser if this parser is nested */
   int addrCrTab;       /* Address of OP_CreateBtree opcode on CREATE TABLE */
   u32 nQueryLoop;      /* Est number of iterations of a query (10*log2(N)) */
   u32 oldmask;         /* Mask of old.* columns referenced */
@@ -3106,7 +3146,9 @@ struct Parse {
   Vdbe *pReprepare;         /* VM being reprepared (sqlite3Reprepare()) */
   const char *zTail;        /* All SQL text past the last semicolon parsed */
   Table *pNewTable;         /* A table being constructed by CREATE TABLE */
-  Index *pNewIndex;         /* An index being constructed by CREATE INDEX */
+  Index *pNewIndex;         /* An index being constructed by CREATE INDEX.
+                            ** Also used to hold redundant UNIQUE constraints
+                            ** during a RENAME COLUMN */
   Trigger *pNewTrigger;     /* Trigger under construct by a CREATE TRIGGER */
   const char *zAuthContext; /* The 6th parameter to db->xAuth callbacks */
 #ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -3179,6 +3221,7 @@ struct AuthContext {
 */
 #define OPFLAG_NCHANGE       0x01    /* OP_Insert: Set to update db->nChange */
                                      /* Also used in P2 (not P5) of OP_Delete */
+#define OPFLAG_NOCHNG        0x01    /* OP_VColumn nochange for UPDATE */
 #define OPFLAG_EPHEM         0x01    /* OP_Column: Ephemeral output is ok */
 #define OPFLAG_LASTROWID     0x20    /* Set to update db->lastRowid */
 #define OPFLAG_ISUPDATE      0x04    /* This OP_Insert is an sql UPDATE */
@@ -3333,6 +3376,7 @@ typedef struct {
   int iDb;            /* 0 for main database.  1 for TEMP, 2.. for ATTACHed */
   int rc;             /* Result code stored here */
   u32 mInitFlags;     /* Flags controlling error messages */
+  u32 nInitRow;       /* Number of rows processed */
 } InitData;
 
 /*
@@ -3393,10 +3437,14 @@ struct Sqlite3Config {
   void (*xVdbeBranch)(void*,unsigned iSrcLine,u8 eThis,u8 eMx);  /* Callback */
   void *pVdbeBranchArg;                                     /* 1st argument */
 #endif
+#ifdef SQLITE_ENABLE_DESERIALIZE
+  sqlite3_int64 mxMemdbSize;        /* Default max memdb size */
+#endif
 #ifndef SQLITE_UNTESTABLE
   int (*xTestCallback)(int);        /* Invoked by sqlite3FaultSim() */
 #endif
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  int bInternalFunctions;           /* Internal SQL functions are visible */
   int iOnceResetThreshold;          /* When to reset OP_Once counters */
   u32 szSorterRef;                  /* Min size in bytes to use sorter-refs */
 };
@@ -3495,7 +3543,7 @@ struct TreeView {
 #endif /* SQLITE_DEBUG */
 
 /*
-** This object is used in varioius ways, all related to window functions
+** This object is used in various ways, all related to window functions
 **
 **   (1) A single instance of this structure is attached to the
 **       the Expr.pWin field for each window function in an expression tree.
@@ -3510,15 +3558,18 @@ struct TreeView {
 **       object on a linked list attached to Select.pWinDefn.
 **
 ** The uses (1) and (2) are really the same Window object that just happens
-** to be accessible in two different ways.  Use (3) is are separate objects.
+** to be accessible in two different ways.  Use case (3) are separate objects.
 */
 struct Window {
   char *zName;            /* Name of window (may be NULL) */
+  char *zBase;            /* Name of base window for chaining (may be NULL) */
   ExprList *pPartition;   /* PARTITION BY clause */
   ExprList *pOrderBy;     /* ORDER BY clause */
-  u8 eType;               /* TK_RANGE or TK_ROWS */
+  u8 eFrmType;            /* TK_RANGE, TK_GROUPS, TK_ROWS, or 0 */
   u8 eStart;              /* UNBOUNDED, CURRENT, PRECEDING or FOLLOWING */
   u8 eEnd;                /* UNBOUNDED, CURRENT, PRECEDING or FOLLOWING */
+  u8 bImplicitFrame;      /* True if frame was implicitly specified */
+  u8 eExclude;            /* TK_NO, TK_CURRENT, TK_TIES, TK_GROUP, or 0 */
   Expr *pStart;           /* Expression for "<expr> PRECEDING" */
   Expr *pEnd;             /* Expression for "<expr> FOLLOWING" */
   Window *pNextWin;       /* Next window function belonging to this SELECT */
@@ -3529,17 +3580,19 @@ struct Window {
   int regResult;
   int csrApp;             /* Function cursor (used by min/max) */
   int regApp;             /* Function register (also used by min/max) */
-  int regPart;            /* First in a set of registers holding PARTITION BY
-                          ** and ORDER BY values for the window */
+  int regPart;            /* Array of registers for PARTITION BY values */
   Expr *pOwner;           /* Expression object this window is attached to */
   int nBufferCol;         /* Number of columns in buffer table */
   int iArgCol;            /* Offset of first argument for this function */
+  int regOne;             /* Register containing constant value 1 */
+  int regStartRowid;
+  int regEndRowid;
 };
 
 #ifndef SQLITE_OMIT_WINDOWFUNC
 void sqlite3WindowDelete(sqlite3*, Window*);
 void sqlite3WindowListDelete(sqlite3 *db, Window *p);
-Window *sqlite3WindowAlloc(Parse*, int, int, Expr*, int , Expr*);
+Window *sqlite3WindowAlloc(Parse*, int, int, Expr*, int , Expr*, u8);
 void sqlite3WindowAttach(Parse*, Expr*, Window*);
 int sqlite3WindowCompare(Parse*, Window*, Window*);
 void sqlite3WindowCodeInit(Parse*, Window*);
@@ -3550,6 +3603,8 @@ void sqlite3WindowUpdate(Parse*, Window*, Window*, FuncDef*);
 Window *sqlite3WindowDup(sqlite3 *db, Expr *pOwner, Window *p);
 Window *sqlite3WindowListDup(sqlite3 *db, Window *p);
 void sqlite3WindowFunctions(void);
+void sqlite3WindowChain(Parse*, Window*, Window*);
+Window *sqlite3WindowAssemble(Parse*, Window*, ExprList*, ExprList*, Token*);
 #else
 # define sqlite3WindowDelete(a,b)
 # define sqlite3WindowFunctions()
@@ -3650,6 +3705,7 @@ int sqlite3IsIdChar(u8);
 */
 int sqlite3StrICmp(const char*,const char*);
 int sqlite3Strlen30(const char*);
+#define sqlite3Strlen30NN(C) (strlen(C)&0x3fffffff)
 char *sqlite3ColumnType(Column*,char*);
 #define sqlite3StrNICmp sqlite3_strnicmp
 
@@ -3766,6 +3822,7 @@ char *sqlite3VMPrintf(sqlite3*,const char*, va_list);
   void sqlite3TreeViewExpr(TreeView*, const Expr*, u8);
   void sqlite3TreeViewBareExprList(TreeView*, const ExprList*, const char*);
   void sqlite3TreeViewExprList(TreeView*, const ExprList*, u8, const char*);
+  void sqlite3TreeViewSrcList(TreeView*, const SrcList*);
   void sqlite3TreeViewSelect(TreeView*, const Select*, u8);
   void sqlite3TreeViewWith(TreeView*, const With*, u8);
 #ifndef SQLITE_OMIT_WINDOWFUNC
@@ -3777,7 +3834,9 @@ char *sqlite3VMPrintf(sqlite3*,const char*, va_list);
 
 void sqlite3SetString(char **, sqlite3*, const char*);
 void sqlite3ErrorMsg(Parse*, const char*, ...);
+int sqlite3ErrorToParser(sqlite3*,int);
 void sqlite3Dequote(char*);
+void sqlite3DequoteExpr(Expr*);
 void sqlite3TokenInit(Token*,char*);
 int sqlite3KeywordCode(const unsigned char*, int);
 int sqlite3RunParser(Parse*, const char*, char **);
@@ -3806,6 +3865,7 @@ void sqlite3ExprListSetName(Parse*,ExprList*,Token*,int);
 void sqlite3ExprListSetSpan(Parse*,ExprList*,const char*,const char*);
 void sqlite3ExprListDelete(sqlite3*, ExprList*);
 u32 sqlite3ExprListFlags(const ExprList*);
+int sqlite3IndexHasDuplicateRootPage(Index*);
 int sqlite3Init(sqlite3*, char**);
 int sqlite3InitCallback(void*, int, char**, char**);
 int sqlite3InitOne(sqlite3*, int, char**, u32);
@@ -3839,6 +3899,11 @@ void sqlite3AddCollateType(Parse*, Token*);
 void sqlite3EndTable(Parse*,Token*,Token*,u8,Select*);
 int sqlite3ParseUri(const char*,const char*,unsigned int*,
                     sqlite3_vfs**,char**,char **);
+#ifdef SQLITE_HAS_CODEC
+  int sqlite3CodecQueryParameters(sqlite3*,const char*,const char*);
+#else
+# define sqlite3CodecQueryParameters(A,B,C) 0
+#endif
 Btree *sqlite3DbNameToBtree(sqlite3*,const char*);
 
 #ifdef SQLITE_UNTESTABLE
@@ -3891,8 +3956,8 @@ void sqlite3Insert(Parse*, SrcList*, Select*, IdList*, int, Upsert*);
 void *sqlite3ArrayAllocate(sqlite3*,void*,int,int*,int*);
 IdList *sqlite3IdListAppend(Parse*, IdList*, Token*);
 int sqlite3IdListIndex(IdList*,const char*);
-SrcList *sqlite3SrcListEnlarge(sqlite3*, SrcList*, int, int);
-SrcList *sqlite3SrcListAppend(sqlite3*, SrcList*, Token*, Token*);
+SrcList *sqlite3SrcListEnlarge(Parse*, SrcList*, int, int);
+SrcList *sqlite3SrcListAppend(Parse*, SrcList*, Token*, Token*);
 SrcList *sqlite3SrcListAppendFromTerm(Parse*, SrcList*, Token*, Token*,
                                       Token*, Select*, Expr*, IdList*);
 void sqlite3SrcListIndexedBy(Parse *, SrcList *, Token *);
@@ -3959,8 +4024,8 @@ Table *sqlite3LocateTableItem(Parse*,u32 flags,struct SrcList_item *);
 Index *sqlite3FindIndex(sqlite3*,const char*, const char*);
 void sqlite3UnlinkAndDeleteTable(sqlite3*,int,const char*);
 void sqlite3UnlinkAndDeleteIndex(sqlite3*,int,const char*);
-void sqlite3Vacuum(Parse*,Token*);
-int sqlite3RunVacuum(char**, sqlite3*, int);
+void sqlite3Vacuum(Parse*,Token*,Expr*);
+int sqlite3RunVacuum(char**, sqlite3*, int, sqlite3_value*);
 char *sqlite3NameFromToken(sqlite3*, Token*);
 int sqlite3ExprCompare(Parse*,Expr*, Expr*, int);
 int sqlite3ExprCompareSkip(Expr*, Expr*, int);
@@ -4003,6 +4068,7 @@ void sqlite3GenerateRowDelete(
 void sqlite3GenerateRowIndexDelete(Parse*, Table*, int, int, int*, int);
 int sqlite3GenerateIndexKey(Parse*, Index*, int, int, int, int*,Index*,int);
 void sqlite3ResolvePartIdxLabel(Parse*,int);
+int sqlite3ExprReferencesUpdatedColumn(Expr*,int*,int);
 void sqlite3GenerateConstraintChecks(Parse*,Table*,int*,int,int,int,int,
                                      u8,u8,int,int*,int*,Upsert*);
 #ifdef SQLITE_ENABLE_NULL_TRIM
@@ -4023,6 +4089,7 @@ ExprList *sqlite3ExprListDup(sqlite3*,ExprList*,int);
 SrcList *sqlite3SrcListDup(sqlite3*,SrcList*,int);
 IdList *sqlite3IdListDup(sqlite3*,IdList*);
 Select *sqlite3SelectDup(sqlite3*,Select*,int);
+FuncDef *sqlite3FunctionSearch(int,const char*);
 void sqlite3InsertBuiltinFuncs(FuncDef*,int);
 FuncDef *sqlite3FindFunction(sqlite3*,const char*,int,u8,u8);
 void sqlite3RegisterBuiltinFunctions(void);
@@ -4180,6 +4247,7 @@ Expr *sqlite3ExprAddCollateToken(Parse *pParse, Expr*, const Token*, int);
 Expr *sqlite3ExprAddCollateString(Parse*,Expr*,const char*);
 Expr *sqlite3ExprSkipCollate(Expr*);
 int sqlite3CheckCollSeq(Parse *, CollSeq *);
+int sqlite3WritableSchema(sqlite3*);
 int sqlite3CheckObjectName(Parse *, const char *);
 void sqlite3VdbeSetChanges(sqlite3 *, int);
 int sqlite3AddInt64(i64*,i64);
@@ -4228,14 +4296,15 @@ void sqlite3AlterRenameColumn(Parse*, SrcList*, Token*, Token*);
 int sqlite3GetToken(const unsigned char *, int *);
 void sqlite3NestedParse(Parse*, const char*, ...);
 void sqlite3ExpirePreparedStatements(sqlite3*, int);
-int sqlite3CodeSubselect(Parse*, Expr *, int, int);
+void sqlite3CodeRhsOfIN(Parse*, Expr*, int);
+int sqlite3CodeSubselect(Parse*, Expr*);
 void sqlite3SelectPrep(Parse*, Select*, NameContext*);
 void sqlite3SelectWrongNumTermsError(Parse *pParse, Select *p);
 int sqlite3MatchSpanName(const char*, const char*, const char*, const char*);
 int sqlite3ResolveExprNames(NameContext*, Expr*);
 int sqlite3ResolveExprListNames(NameContext*, ExprList*);
 void sqlite3ResolveSelectNames(Parse*, Select*, NameContext*);
-void sqlite3ResolveSelfReference(Parse*,Table*,int,Expr*,ExprList*);
+int sqlite3ResolveSelfReference(Parse*,Table*,int,Expr*,ExprList*);
 int sqlite3ResolveOrderGroupBy(Parse*, Select*, ExprList*, const char*);
 void sqlite3ColumnDefault(Vdbe *, Table *, int, int);
 void sqlite3AlterFinishAddColumn(Parse *, Token *);
@@ -4383,6 +4452,9 @@ sqlite3_int64 sqlite3StmtCurrentTime(sqlite3_context*);
 int sqlite3VdbeParameterIndex(Vdbe*, const char*, int);
 int sqlite3TransferBindings(sqlite3_stmt *, sqlite3_stmt *);
 void sqlite3ParserReset(Parse*);
+#ifdef SQLITE_ENABLE_NORMALIZE
+char *sqlite3Normalize(Vdbe*, const char*);
+#endif
 int sqlite3Reprepare(Vdbe*);
 void sqlite3ExprListCheckLength(Parse*, ExprList*, const char*);
 CollSeq *sqlite3BinaryCompareCollSeq(Parse *, Expr *, Expr *);
@@ -4477,7 +4549,7 @@ const char *sqlite3JournalModename(int);
 #define IN_INDEX_NOOP_OK     0x0001  /* OK to return IN_INDEX_NOOP */
 #define IN_INDEX_MEMBERSHIP  0x0002  /* IN operator used for membership test */
 #define IN_INDEX_LOOP        0x0004  /* IN operator used as a loop */
-int sqlite3FindInIndex(Parse *, Expr *, u32, int*, int*);
+int sqlite3FindInIndex(Parse *, Expr *, u32, int*, int*, int*);
 
 int sqlite3JournalOpen(sqlite3_vfs *, const char *, sqlite3_file *, int, int);
 int sqlite3JournalSize(sqlite3_vfs *);

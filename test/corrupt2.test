@@ -95,11 +95,11 @@ do_test corrupt2-1.4 {
   close $f
 
   sqlite3 db2 corrupt.db
-  catchsql "
-    $::presql
-    SELECT * FROM sqlite_master;
-  " db2
-} {1 {database disk image is malformed}}
+  # Note: This test is no longer meaningful due to the deferred computation
+  # of MemPage.nFree 
+  catchsql {PRAGMA quick_check} db2
+} {0 {{*** in database main ***
+Page 1: free space corruption}}}
 
 do_test corrupt2-1.5 {
   db2 close
@@ -118,11 +118,9 @@ do_test corrupt2-1.5 {
   close $f
 
   sqlite3 db2 corrupt.db
-  catchsql "
-    $::presql
-    SELECT * FROM sqlite_master;
-  " db2
-} {1 {database disk image is malformed}}
+  catchsql {PRAGMA quick_check} db2
+} {0 {{*** in database main ***
+Page 1: free space corruption}}}
 db2 close
 
 # Corrupt a database by having 2 indices of the same name:
@@ -133,6 +131,7 @@ do_test corrupt2-2.1 {
   forcecopy test.db corrupt.db
 
   sqlite3 db2 corrupt.db 
+  sqlite3_db_config db2 DEFENSIVE 0
   execsql "
     $::presql
     CREATE INDEX a1 ON abc(a);
@@ -265,6 +264,7 @@ proc corruption_test {args} {
   forcedelete corrupt.db-journal
 
   sqlite3 db corrupt.db 
+  sqlite3_db_config db DEFENSIVE 0
   db eval $::presql
   eval $A(-tclprep)
   db eval $A(-sqlprep)
