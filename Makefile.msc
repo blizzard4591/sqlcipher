@@ -690,9 +690,9 @@ CORE_LINK_OPTS =
 !ENDIF
 
 !IF "$(PLATFORM)"=="x86"
-CORE_LINK_OPTS = $(CORE_LINK_OPTS) "$(OPENSSL_DIR)\lib\libeay32.lib" "$(OPENSSL_DIR)\lib\ssleay32.lib"
+CORE_LINK_OPTS = $(CORE_LINK_OPTS) "$(OPENSSL_DIR)\lib\libcrypto.lib" "$(OPENSSL_DIR)\lib\libssl.lib"
 !ELSEIF "$(PLATFORM)"=="x64"
-CORE_LINK_OPTS = $(CORE_LINK_OPTS) "$(OPENSSL_DIR)\lib\libeay32.lib" "$(OPENSSL_DIR)\lib\ssleay32.lib"
+CORE_LINK_OPTS = $(CORE_LINK_OPTS) "$(OPENSSL_DIR)\lib\libcrypto.lib" "$(OPENSSL_DIR)\lib\libssl.lib"
 !ELSE
 CORE_LINK_OPTS =
 !ENDIF
@@ -763,9 +763,9 @@ SHELL_CORE_LIB =
 # These are additional linker options used for the shell executable.
 #
 !IF "$(PLATFORM)"=="x86"
-SHELL_LINK_OPTS = $(SHELL_CORE_LIB) "$(OPENSSL_DIR)\lib\libeay32.lib" "$(OPENSSL_DIR)\lib\ssleay32.lib"
+SHELL_LINK_OPTS = $(SHELL_CORE_LIB) "$(OPENSSL_DIR)\lib\libcrypto.lib" "$(OPENSSL_DIR)\lib\libssl.lib"
 !ELSEIF "$(PLATFORM)"=="x64"
-SHELL_LINK_OPTS = $(SHELL_CORE_LIB) "$(OPENSSL_DIR)\lib\libeay32.lib" "$(OPENSSL_DIR)\lib\ssleay32.lib"
+SHELL_LINK_OPTS = $(SHELL_CORE_LIB) "$(OPENSSL_DIR)\lib\libcrypto.lib" "$(OPENSSL_DIR)\lib\libssl.lib"
 !ELSE
 SHELL_LINK_OPTS = $(SHELL_CORE_LIB)
 !ENDIF
