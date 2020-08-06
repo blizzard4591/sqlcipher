@@ -245,12 +245,12 @@ struct sqlite3_value {
 #define MEM_Int       0x0004   /* Value is an integer */
 #define MEM_Real      0x0008   /* Value is a real number */
 #define MEM_Blob      0x0010   /* Value is a BLOB */
-#define MEM_AffMask   0x001f   /* Mask of affinity bits */
-#define MEM_FromBind  0x0020   /* Value originates from sqlite3_bind() */
-/* Available          0x0040   */
+#define MEM_IntReal   0x0020   /* MEM_Int that stringifies like MEM_Real */
+#define MEM_AffMask   0x003f   /* Mask of affinity bits */
+#define MEM_FromBind  0x0040   /* Value originates from sqlite3_bind() */
 #define MEM_Undefined 0x0080   /* Value is undefined */
 #define MEM_Cleared   0x0100   /* NULL set by OP_Null, not from data */
-#define MEM_TypeMask  0xc1df   /* Mask of type bits */
+#define MEM_TypeMask  0xc1bf   /* Mask of type bits */
 
 
 /* Whenever Mem contains a valid string or blob representation, one of
@@ -286,7 +286,8 @@ struct sqlite3_value {
 ** True if Mem X is a NULL-nochng type.
 */
 #define MemNullNochng(X) \
-  ((X)->flags==(MEM_Null|MEM_Zero) && (X)->n==0 && (X)->u.nZero==0)
+  (((X)->flags&MEM_TypeMask)==(MEM_Null|MEM_Zero) \
+    && (X)->n==0 && (X)->u.nZero==0)
 
 /*
 ** Return true if a memory cell is not marked as invalid.  This macro
@@ -482,11 +483,11 @@ struct PreUpdate {
 void sqlite3VdbeError(Vdbe*, const char *, ...);
 void sqlite3VdbeFreeCursor(Vdbe *, VdbeCursor*);
 void sqliteVdbePopStack(Vdbe*,int);
+int SQLITE_NOINLINE sqlite3VdbeFinishMoveto(VdbeCursor*);
 int sqlite3VdbeCursorMoveto(VdbeCursor**, int*);
 int sqlite3VdbeCursorRestore(VdbeCursor*);
 u32 sqlite3VdbeSerialTypeLen(u32);
 u8 sqlite3VdbeOneByteSerialTypeLen(u8);
-u32 sqlite3VdbeSerialType(Mem*, int, u32*);
 u32 sqlite3VdbeSerialPut(unsigned char*, Mem*, u32);
 u32 sqlite3VdbeSerialGet(const unsigned char*, u32, Mem*);
 void sqlite3VdbeDeleteAuxData(sqlite3*, AuxData**, int, int);
@@ -529,7 +530,7 @@ int sqlite3VdbeBooleanValue(Mem*, int ifNull);
 void sqlite3VdbeIntegerAffinity(Mem*);
 int sqlite3VdbeMemRealify(Mem*);
 int sqlite3VdbeMemNumerify(Mem*);
-void sqlite3VdbeMemCast(Mem*,u8,u8);
+int sqlite3VdbeMemCast(Mem*,u8,u8);
 int sqlite3VdbeMemFromBtree(BtCursor*,u32,u32,Mem*);
 void sqlite3VdbeMemRelease(Mem *p);
 int sqlite3VdbeMemFinalize(Mem*, FuncDef*);
@@ -595,7 +596,7 @@ int sqlite3VdbeCheckFk(Vdbe *, int);
 
 #ifdef SQLITE_DEBUG
   void sqlite3VdbePrintSql(Vdbe*);
-  void sqlite3VdbeMemPrettyPrint(Mem *pMem, char *zBuf);
+  void sqlite3VdbeMemPrettyPrint(Mem *pMem, StrAccum *pStr);
 #endif
 #ifndef SQLITE_OMIT_UTF16
   int sqlite3VdbeMemTranslate(Mem*, u8);

@@ -527,7 +527,6 @@ SHELL_OPT += -DSQLITE_ENABLE_STMTVTAB
 SHELL_OPT += -DSQLITE_ENABLE_DBPAGE_VTAB
 SHELL_OPT += -DSQLITE_ENABLE_DBSTAT_VTAB
 SHELL_OPT += -DSQLITE_ENABLE_OFFSET_SQL_FUNC
-SHELL_OPT += -DSQLITE_INTROSPECTION_PRAGMAS
 FUZZERSHELL_OPT = -DSQLITE_ENABLE_JSON1
 FUZZCHECK_OPT = -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_MEMSYS5
 FUZZCHECK_OPT += -DSQLITE_MAX_MEMORY=50000000
@@ -738,6 +737,7 @@ SHELL_SRC = \
 	$(TOP)/ext/expert/sqlite3expert.h \
 	$(TOP)/ext/misc/zipfile.c \
 	$(TOP)/ext/misc/memtrace.c \
+	$(TOP)/ext/misc/dbdata.c \
         $(TOP)/src/test_windirent.c
 
 shell.c:	$(SHELL_SRC) $(TOP)/tool/mkshellc.tcl
@@ -934,10 +934,6 @@ fuzztest:	fuzzcheck$(EXE) $(FUZZDATA) sessionfuzz$(EXE) $(TOP)/test/sessionfuzz-
 	./fuzzcheck$(EXE) $(FUZZDATA)
 	./sessionfuzz run $(TOP)/test/sessionfuzz-data1.db
 
-fastfuzztest:	fuzzcheck$(EXE) $(FUZZDATA) sessionfuzz$(EXE) $(TOP)/test/sessionfuzz-data1.db
-	./fuzzcheck$(EXE) --limit-mem 100M $(FUZZDATA)
-	./sessionfuzz run $(TOP)/test/sessionfuzz-data1.db
-
 valgrindfuzz:	fuzzcheck$(EXE) $(FUZZDATA) sessionfuzz$(EXE) $(TOP)/test/sessionfuzz-data1.db
 	valgrind ./fuzzcheck$(EXE) --cell-size-check --limit-mem 10M --timeout 600 $(FUZZDATA)
 	valgrind ./sessionfuzz run $(TOP)/test/sessionfuzz-data1.db
@@ -955,7 +951,7 @@ quicktest:	./testfixture$(EXE)
 
 # The default test case.  Runs most of the faster standard TCL tests,
 # and fuzz tests, and sqlite3_analyzer and sqldiff tests.
-test:	fastfuzztest sourcetest $(TESTPROGS) tcltest
+test:	fuzztest sourcetest $(TESTPROGS) tcltest
 
 # Run a test using valgrind.  This can take a really long time
 # because valgrind is so much slower than a native machine.

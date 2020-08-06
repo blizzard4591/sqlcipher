@@ -148,14 +148,16 @@ CRYPTOLIBOBJ = \
   crypto_impl.lo \
   crypto_openssl.lo \
   crypto_libtomcrypt.lo \
+  crypto_nss.lo \
   crypto_cc.lo
-  
+
 CRYPTOSRC = \
   $(TOP)/src/crypto.h \
   $(TOP)/src/sqlcipher.h \
   $(TOP)/src/crypto.c \
   $(TOP)/src/crypto_impl.c \
 	$(TOP)/src/crypto_libtomcrypt.c \
+	$(TOP)/src/crypto_nss.c \
 	$(TOP)/src/crypto_openssl.c \
 	$(TOP)/src/crypto_cc.c
 
@@ -629,7 +631,6 @@ SHELL_OPT += -DSQLITE_ENABLE_DBPAGE_VTAB
 SHELL_OPT += -DSQLITE_ENABLE_DBSTAT_VTAB
 SHELL_OPT += -DSQLITE_ENABLE_OFFSET_SQL_FUNC
 SHELL_OPT += -DSQLITE_ENABLE_DESERIALIZE
-SHELL_OPT += -DSQLITE_INTROSPECTION_PRAGMAS
 FUZZERSHELL_OPT = -DSQLITE_ENABLE_JSON1
 FUZZCHECK_OPT = -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_MEMSYS5 -DSQLITE_OSS_FUZZ
 FUZZCHECK_OPT += -DSQLITE_MAX_MEMORY=50000000
@@ -820,6 +821,8 @@ crypto_impl.lo:	$(TOP)/src/crypto_impl.c $(HDR)
 	$(LTCOMPILE) -c $(TOP)/src/crypto_impl.c
 crypto_openssl.lo:	$(TOP)/src/crypto_openssl.c $(HDR)
 	$(LTCOMPILE) -c $(TOP)/src/crypto_openssl.c
+crypto_nss.lo:	$(TOP)/src/crypto_nss.c $(HDR)
+	$(LTCOMPILE) -c $(TOP)/src/crypto_nss.c
 crypto_libtomcrypt.lo:	$(TOP)/src/crypto_libtomcrypt.c $(HDR)
 	$(LTCOMPILE) -c $(TOP)/src/crypto_libtomcrypt.c
 crypto_cc.lo:	$(TOP)/src/crypto_cc.c $(HDR)
@@ -1086,7 +1089,7 @@ parse.h:	parse.c
 
 parse.c:	$(TOP)/src/parse.y lemon$(BEXE)
 	cp $(TOP)/src/parse.y .
-	./lemon$(BEXE) $(OPT_FEATURE_FLAGS) $(OPTS) parse.y
+	./lemon$(BEXE) $(OPT_FEATURE_FLAGS) $(OPTS) -S parse.y
 
 sqlite3.h:	$(TOP)/src/sqlite.h.in $(TOP)/manifest mksourceid$(BEXE) $(TOP)/VERSION
 	$(TCLSH_CMD) $(TOP)/tool/mksqlite3h.tcl $(TOP) >sqlite3.h
@@ -1211,10 +1214,10 @@ FTS5_SRC = \
    $(TOP)/ext/fts5/fts5_varint.c \
    $(TOP)/ext/fts5/fts5_vocab.c  \
 
-fts5parse.c:	$(TOP)/ext/fts5/fts5parse.y lemon
+fts5parse.c:	$(TOP)/ext/fts5/fts5parse.y lemon$(BEXE)
 	cp $(TOP)/ext/fts5/fts5parse.y .
 	rm -f fts5parse.h
-	./lemon$(BEXE) $(OPTS) fts5parse.y
+	./lemon$(BEXE) $(OPTS) -S fts5parse.y
 
 fts5parse.h: fts5parse.c
 
@@ -1276,10 +1279,6 @@ fuzztest:	fuzzcheck$(TEXE) $(FUZZDATA) sessionfuzz$(TEXE) $(TOP)/test/sessionfuz
 	./fuzzcheck$(TEXE) $(FUZZDATA)
 	./sessionfuzz$(TEXE) run $(TOP)/test/sessionfuzz-data1.db
 
-fastfuzztest:	fuzzcheck$(TEXE) $(FUZZDATA) sessionfuzz$(TEXE) $(TOP)/test/sessionfuzz-data1.db
-	./fuzzcheck$(TEXE) --limit-mem 100M $(FUZZDATA)
-	./sessionfuzz$(TEXE) run $(TOP)/test/sessionfuzz-data1.db
-
 valgrindfuzz:	fuzzcheck$(TEXT) $(FUZZDATA) sessionfuzz$(TEXE) $(TOP)/test/sessionfuzz-data1.db
 	valgrind ./fuzzcheck$(TEXE) --cell-size-check --limit-mem 10M --timeout 600 $(FUZZDATA)
 	valgrind ./sessionfuzz$(TEXE) run $(TOP)/test/sessionfuzz-data1.db
@@ -1297,7 +1296,7 @@ quicktest:	./testfixture$(TEXE)
 # This is the common case.  Run many tests that do not take too long,
 # including fuzzcheck, sqlite3_analyzer, and sqldiff tests.
 #
-test:	fastfuzztest sourcetest $(TESTPROGS) tcltest
+test:	fuzztest sourcetest $(TESTPROGS) tcltest
 
 # Run a test using valgrind.  This can take a really long time
 # because valgrind is so much slower than a native machine.

@@ -219,11 +219,19 @@ else
       AC_CHECK_LIB([tomcrypt], [register_cipher], ,
                    AC_MSG_ERROR([Library crypto not found. Install libtomcrypt!"]))
     else
+      if test "$crypto_lib" = "nss"; then
+        CFLAGS+=" -DSQLCIPHER_CRYPTO_NSS"
+        BUILD_CFLAGS+=" -DSQLCIPHER_CRYPTO_NSS"
+        AC_MSG_RESULT([nss3])
+        AC_CHECK_LIB([nss3], [PK11_Decrypt], ,
+                     AC_MSG_ERROR([Library crypto not found. Install nss!"]))
+      else
         CFLAGS+=" -DSQLCIPHER_CRYPTO_OPENSSL"
         BUILD_CFLAGS+=" -DSQLCIPHER_CRYPTO_OPENSSL"
 	      AC_MSG_RESULT([openssl])
         AC_CHECK_LIB([crypto], [HMAC_Init_ex], ,
                      AC_MSG_ERROR([Library crypto not found. Install openssl!"]))
+      fi
     fi
   fi
 fi
@@ -660,6 +668,12 @@ else
   AC_MSG_RESULT([no])
 fi
 
+########
+# The --enable-extensions argument is short-hand to enable
+# multiple extensions.
+AC_ARG_ENABLE(all, AC_HELP_STRING([--enable-all],
+      [Enable FTS4, FTS5, Geopoly, JSON, RTree, Sessions]))
+
 #########
 # See whether we should enable Full Text Search extensions
 AC_ARG_ENABLE(fts3, AC_HELP_STRING([--enable-fts3],
@@ -669,13 +683,13 @@ if test "${enable_fts3}" = "yes" ; then
 fi
 AC_ARG_ENABLE(fts4, AC_HELP_STRING([--enable-fts4],
       [Enable the FTS4 extension]))
-if test "${enable_fts4}" = "yes" ; then
+if test "${enable_fts4}" = "yes" -o "${enable_all}" = "yes" ; then
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_FTS4"
   AC_SEARCH_LIBS([log],[m])
 fi
 AC_ARG_ENABLE(fts5, AC_HELP_STRING([--enable-fts5],
       [Enable the FTS5 extension]))
-if test "${enable_fts5}" = "yes" ; then
+if test "${enable_fts5}" = "yes" -o "${enable_all}" = "yes" ; then
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_FTS5"
   AC_SEARCH_LIBS([log],[m])
 fi
@@ -683,7 +697,7 @@ fi
 #########
 # See whether we should enable JSON1
 AC_ARG_ENABLE(json1, AC_HELP_STRING([--enable-json1],[Enable the JSON1 extension]))
-if test "${enable_json1}" = "yes" ; then
+if test "${enable_json1}" = "yes" -o "${enable_all}" = "yes" ; then
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_JSON1"
 fi
 
@@ -701,7 +715,7 @@ fi
 AC_ARG_ENABLE(geopoly, AC_HELP_STRING([--enable-geopoly],
       [Enable the GEOPOLY extension]),
       [enable_geopoly=yes],[enable_geopoly=no])
-if test "${enable_geopoly}" = "yes" ; then
+if test "${enable_geopoly}" = "yes" -o "${enable_all}" = "yes" ; then
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_GEOPOLY"
   enable_rtree=yes
 fi
@@ -718,7 +732,7 @@ fi
 # See whether we should enable the SESSION extension
 AC_ARG_ENABLE(session, AC_HELP_STRING([--enable-session],
       [Enable the SESSION extension]))
-if test "${enable_session}" = "yes" ; then
+if test "${enable_session}" = "yes" -o "${enable_all}" = "yes" ; then
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_SESSION"
   OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_PREUPDATE_HOOK"
 fi

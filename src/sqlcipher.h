@@ -65,8 +65,6 @@ typedef struct {
   int (*get_iv_sz)(void *ctx);
   int (*get_block_sz)(void *ctx);
   int (*get_hmac_sz)(void *ctx, int algorithm);
-  int (*ctx_copy)(void *target_ctx, void *source_ctx);
-  int (*ctx_cmp)(void *c1, void *c2);
   int (*ctx_init)(void **ctx);
   int (*ctx_free)(void **ctx);
   int (*fips_status)(void *ctx);
@@ -74,18 +72,28 @@ typedef struct {
 } sqlcipher_provider;
 
 /* utility functions */
-void sqlcipher_free(void *, int);
-void* sqlcipher_malloc(int);
-void sqlcipher_mlock(void *, int);
-void sqlcipher_munlock(void *, int);
-void* sqlcipher_memset(void *, unsigned char, int);
-int sqlcipher_ismemset(const void *, unsigned char, int);
+void* sqlcipher_malloc(u64);
+void sqlcipher_mlock(void *, u64);
+void sqlcipher_munlock(void *, u64);
+void* sqlcipher_memset(void *, unsigned char, u64);
+int sqlcipher_ismemset(const void *, unsigned char, u64);
 int sqlcipher_memcmp(const void *, const void *, int);
-void sqlcipher_free(void *, int);
+void sqlcipher_free(void *, u64);
+char* sqlcipher_version();
 
 /* provider interfaces */
 int sqlcipher_register_provider(sqlcipher_provider *);
 sqlcipher_provider* sqlcipher_get_provider(void);
+
+#define SQLCIPHER_MUTEX_PROVIDER          0
+#define SQLCIPHER_MUTEX_PROVIDER_ACTIVATE 1
+#define SQLCIPHER_MUTEX_PROVIDER_RAND     2
+#define SQLCIPHER_MUTEX_RESERVED1         3
+#define SQLCIPHER_MUTEX_RESERVED2         4
+#define SQLCIPHER_MUTEX_RESERVED3         5
+#define SQLCIPHER_MUTEX_COUNT             6
+
+sqlite3_mutex* sqlcipher_mutex(int);
 
 #endif
 #endif
