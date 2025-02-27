@@ -2,10 +2,10 @@ SetLocal EnableDelayedExpansion
 @ECHO OFF
 
 echo Adding Path to tclsh.exe to PATH variable...
-SET PATH=%PATH%;C:\ActiveTcl\bin\
+SET PATH=%PATH%;P:\Dev\openMittsu-deps\IronTcl\bin\
 
-SET SC_OUTPUT_DIR=C:\CppProjects\sqlcipher
-IF NOT DEFINED WINDOWSSDKDIR SET WINDOWSSDKDIR=C:\Program Files (x86)\Windows Kits\10\Include\10.0.16299.0
+SET SC_OUTPUT_DIR=P:\Dev\openMittsu-deps\sqlcipher
+IF NOT DEFINED WINDOWSSDKDIR SET WINDOWSSDKDIR=C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0
 IF %WINDOWSSDKDIR:~-1%==\ SET WINDOWSSDKDIR=%WINDOWSSDKDIR:~0,-1%
 echo Windows SDK Directory set to: %WINDOWSSDKDIR%
 
@@ -17,13 +17,13 @@ goto commonExit
 
 :x86
 echo Platform: x86
-SET OPENSSL_DIR=C:\OpenSSL-Win32
+SET OPENSSL_DIR=P:\Dev\openMittsu-deps\OpenSSL-Win32
 
 goto build
 
 :x64
 echo "Platform: x64"
-SET OPENSSL_DIR=C:\OpenSSL-Win64
+SET OPENSSL_DIR=P:\Dev\openMittsu-deps\OpenSSL-Win64
 
 goto build
 
@@ -41,6 +41,9 @@ goto build
 
 echo Building configuration: DEBUG %PLATFORM%
 nmake -f Makefile.msc clean > buildLogDebug.txt 2>&1
+
+xcopy /Y %OPENSSL_DIR%\lib\VC\%PLATFORM%\MDd\* "%OPENSSL_DIR%\lib"
+
 SET DEBUG=2
 nmake -f Makefile.msc >> buildLogDebug.txt 2>&1
 IF ERRORLEVEL 1 GOTO errorHandling
@@ -55,6 +58,9 @@ echo Building configuration: RELEASE %PLATFORM%
 nmake -f Makefile.msc clean > buildLogRelease.txt 2>&1
 SET DEBUG=0
 nmake -f Makefile.msc >> buildLogRelease.txt 2>&1
+
+xcopy /Y %OPENSSL_DIR%\lib\VC\%PLATFORM%\MDd\* "%OPENSSL_DIR%\lib"
+
 IF ERRORLEVEL 1 GOTO errorHandling
 lib /NOLOGO /MACHINE:%PLATFORM% /def:sqlite3.def /out:"%SC_OUTPUT_DIR%\compile\%PLATFORM%\Release\sqlite3.lib"
 xcopy /Y sqlite3.dll "%SC_OUTPUT_DIR%\distribute\%PLATFORM%\Release\"
